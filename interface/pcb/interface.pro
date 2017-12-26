@@ -1,4 +1,4 @@
-update=Tue 07 Nov 2017 09:38:28 PM EST
+update=Tue 05 Dec 2017 04:33:22 PM EST
 version=1
 last_client=kicad
 [pcbnew]
@@ -23,6 +23,8 @@ ModuleOutlineThickness=0.150000000000
 [cvpcb]
 version=1
 NetIExt=net
+[general]
+version=1
 [eeschema]
 version=1
 LibDir=/zfs/dev/kicad-gigalib/library;/zfs/dev/kicad-personal;/zfs/dev/kicad-seeed-opl
@@ -65,5 +67,4 @@ LibName35=/zfs/dev/kicad-library/library/device_big
 LibName36=SeeedOPL-Resistor-2016
 LibName37=SeeedOPL-Connector-2016
 LibName38=SeeedOPL-Inductor-2016
-[general]
-version=1
+LibName39=SeeedOPL-Display-2016

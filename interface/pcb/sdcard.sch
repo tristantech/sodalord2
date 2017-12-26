@@ -37,12 +37,13 @@ LIBS:device_big
 LIBS:SeeedOPL-Resistor-2016
 LIBS:SeeedOPL-Connector-2016
 LIBS:SeeedOPL-Inductor-2016
+LIBS:SeeedOPL-Display-2016
 LIBS:interface-cache
 EELAYER 25 0
 EELAYER END
 $Descr A4 11693 8268
 encoding utf-8
-Sheet 2 8
+Sheet 2 7
 Title ""
 Date ""
 Rev ""
