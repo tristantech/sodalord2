@@ -1,5 +1,13 @@
-
+import bcrypt
 import datetime
+
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
+
+import settings
+
+Base = declarative_base()
 
 class User(Base):
 	""" A user object for each registered sodalord customer. """
@@ -7,35 +15,79 @@ class User(Base):
 	__tablename__ = "users"
 	
 	id = Column(Integer, primary_key=True)
-	name = Column(String, max_length=100)
-	email = Column(String, max_length=100)
-	username = Column(String, max_length=20)
-	password = Column(String, max_length=100) # Salted & hashed using bcrypt
-	active = Column(Boolean)
-	deleted = Column(Boolean)
-	admin = Column(Boolean)
-	
-	REGEX_USERNAME = r"[a-z0-9_]{1,20}"
-	REGEX_NAME = r"[A-Za-z\ \-]{1,100}"
-	
+	name = Column(String)
+	email = Column(String)
+	username = Column(String)
+	password = Column(String) # Salted & hashed using bcrypt
+	active = Column(Integer)
+	deleted = Column(Integer)
+	account_type = Column(String)
+	timestamp = Column(DateTime)
+	transactions_in = relationship("Transaction", back_populates="user_to")
+	transactions_out = relationship("Transaction", back_populates="user_from")
+	attributes = relationship("UserAttribute", back_populates="user")
+
+	# Various account types exist:
+	#  ADMIN:		Administrator accounts that have the power create arbitary transactions.
+	#  CUSTOMER:	Ordinary users of the machine. Limited privileges.
+	#  MACHINE:		Non-human users, such as the Sodalord account.
+	ADMIN = "admin"
+	CUSTOMER = "customer"
+	MACHINE = "machine"
+	__mapper_args__ = {"polymorphic_on": account_type}
+
+
 	def get_balance(self):
-		""" Computes the user's balance in cents. """
-		bal = 0
-		return bal
-	
-	
-	@static_method
-	def get_user(username):
-		""" Get a user by username, or None if they don't exist. """
-		return self.db.Query(User).filter(User.username==username).one_or_none()
-	
-	@static_method
+		""" Computes the user's balance in cents by subtracting out-transactions from in-transactions. """
+		return sum(map(lambda t: t.amount, self.transactions_in)) - sum(map(lambda t: t.amount, self.transactions_out))
+
+	def check_password(self, passwd):
+		""" Checks a user-provided password. Returns True if correct. """
+		return bcrypt.checkpw(passwd.encode("utf8"), self.password.encode("utf8"))
+
+	def set_password(self, old_pass, new_pass):
+		""" Sets a new password. Old password must be provded unless current password is None. """
+		if self.password is None or self.check_password(old_pass):
+			self.password = bcrypt.hashpw(new_pass.encode("utf8"), bcrypt.gensalt().encode("utf8"))
+			return True
+		return False
+
+	def get_attr(self, k):
+		""" Returns a list of values with key `k`. Returns None list if key not found. """
+		attr = filter(lambda a: a.key==k, self.attributes)
+		return None if len(attr) == 0 else attr
+
+	def __str__(self):
+		return "[User: %s, %s, %s]".format(self.name, self.username, self.email, self.account_type)
+
+	def get_dict(self):
+		""" Returns a dict with select info on this user. """
+		output = {}
+		for att in ("name","username","email","account_type","id"):
+			output[att] = getattr(self, att)
+		return output
+
+	@staticmethod
 	def validate_username(username):
-		pass
+		return username and re.match(settings.REGEX_USERNAME, username)
 	
-	@static_method
+	@staticmethod
 	def validate_name(name):
-		pass
+		return name and re.match(settings.REGEX_NAME, name)
+
+	@staticmethod
+	def validate_email(email):
+		return email and re.match(settings.REGEX_EMAIL, email)
+
+class AdminUser(User):
+	__mapper_args__ = {'polymorphic_identity': User.ADMIN}
+
+class CustomerUser(User):
+	verified = Column(Integer) # Gets set after email confirmation step.
+	__mapper_args__ = {'polymorphic_identity': User.CUSTOMER}
+
+class MachineUser(User):
+	__mapper_args__ = {'polymorphic_identity': User.MACHINE}
 
 class UserAttribute(Base):
 	""" Stores additional user properties, such as aliases and barcodes/cards. """
@@ -43,9 +95,13 @@ class UserAttribute(Base):
 	__tablename__ = "users_attributes"
 	
 	id = Column(Integer, primary_key=True)
-	user = Column() #TODO: Foreign key
-	key = Column(String, max_length=200)
+	user_id = Column(Integer, ForeignKey('users.id'))
+	user = relationship("User", back_populates="attributes")
+	key = Column(String)
 	value = Column(Text)
+
+	def __str__(self):
+		return "%s: %s".format(self.key, self.value)
 
 class Transaction(Base):
 	""" Records all transactions between users. """
@@ -55,51 +111,21 @@ class Transaction(Base):
 	id = Column(Integer, primary_key=True)
 	timestamp = Column(DateTime)
 	
-	account_from = Column(ForeignKey) #TODO: foreign keys
-	account_to = Column(ForeignKey)
-	amount = Column(Integer) # In USD Cents. Must be positive.
+	user_from_id = Column(Integer, ForeignKey('users.id'))
+	user_from = relationship("User", back_populates="transactions_out")
+
+	user_to_id = Column(Integer, ForeignKey('users.id'))
+	user_to = relationship("User", back_populates="transactions_in")
+
+	amount = Column(Integer) # In cents. Must be positive.
 	
 	notes = Column(Text)
 	details = Column(Text)
-	
-	@static_method
-	def transaction(username_from, username_to, amount, **kwargs):
-		""" Attempts to perform a transaction between the two users. """
-		
-		if type(amount) != int or amount <= 0:
-			raise ValueError("Amount must be an integer and greater than zero.")
-		
-		# TODO: Set up a database transaction to make this atomic. Make sure it
-		# 		 properly aborted after an exception.
-		# TODO: Validate usernames against our regex?
-		# TODO: Use more descriptive exceptions.
-		
-		# Check that username_from exists and has sufficient funds.
-		user_from = User.get_user(username_from)
-		if not user_from:
-			raise Exception("User `%s` cannot be found.".format(username_from))
-		if not user_from.get_balance() >= amount:
-			raise Exception("User `%s` has insufficient funds. (Current balance = $%d)".format(
-				user_from.username,
-				user_from.get_balance()/100.0
-			))
-		
-		# Check that the receiving user exists
-		user_to = User.get_user(username_to)
-		if not user_to:
-			raise Exception("User `%s` cannot be found.".format(username_from))
-		
-		# Make the transaction.
-		t = Transaction()
-		t.account_from = user_from
-		t.account_to = user_to
-		t.amount = amount
-		t.timestamp = datetime.datetime.now()
-		t.notes = kwargs.get("notes")
-		t.details = kwargs.get("details")
 
-		#TODO: commit here
+	def dollars(self):
+		return self.amount/100.0
 
-
+	def __str__(self):
+		return "[Transaction: %d from (%s) to (%s)]".format(self.dollars(), user_from.name, user_to.name)
 		
 	
