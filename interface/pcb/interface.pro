@@ -1,4 +1,4 @@
-update=Wednesday, December 27, 2017 'PMt' 05:55:45 PM
+update=Thu 28 Dec 2017 03:31:10 PM EST
 version=1
 last_client=kicad
 [pcbnew]
@@ -27,7 +27,7 @@ NetIExt=net
 version=1
 [eeschema]
 version=1
-LibDir=/Users/tristanh/dev/kicad-personal
+LibDir=/home/tristanh/dev/kicad-personal
 [eeschema/libraries]
 LibName1=interface-rescue
 LibName2=power

@@ -1,0 +1,3 @@
+(fp_lib_table
+  (lib (name NHD-C0220BiZ)(type KiCad)(uri "$(KIPRJMOD)/NHD-C0220BiZ.pretty")(options "")(descr ""))
+)
